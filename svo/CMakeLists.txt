@@ -47,6 +47,7 @@ SET(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} -O3 -fsee -fomit-frame-pointer -
 # Add plain cmake packages 
 FIND_PACKAGE(OpenCV REQUIRED)
 FIND_PACKAGE(Eigen REQUIRED)
+set(Sophus_DIR "/home/wys/slam/SVO/ws/Sophus/build")
 FIND_PACKAGE(Sophus REQUIRED)
 FIND_PACKAGE(fast REQUIRED)
 FIND_PACKAGE(Boost REQUIRED COMPONENTS thread system)
@@ -110,6 +111,7 @@ LIST(APPEND SOURCEFILES
 
 # Add g2o if available
 IF(HAVE_G2O)
+  set(G20_DIR "/home/wys/slam/SVO/ws/g2o-20160424_git/install")
   FIND_PACKAGE(G2O REQUIRED)
   INCLUDE_DIRECTORIES(
     ${G2O_INCLUDE_DIR}
