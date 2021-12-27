@@ -30,8 +30,8 @@
 
 namespace svo {
 
-FrameHandlerMono::FrameHandlerMono(vk::AbstractCamera* cam) :
-  FrameHandlerBase(),
+FrameHandlerMono::FrameHandlerMono(vk::AbstractCamera* cam) ://FrameHandlerMono类的初始化，单目帧处理
+  FrameHandlerBase(),//基类
   cam_(cam),
   reprojector_(cam_, map_),
   depth_filter_(NULL)
@@ -41,13 +41,13 @@ FrameHandlerMono::FrameHandlerMono(vk::AbstractCamera* cam) :
 
 void FrameHandlerMono::initialize()
 {
-  feature_detection::DetectorPtr feature_detector(
+  feature_detection::DetectorPtr feature_detector(//特征提取
       new feature_detection::FastDetector(
           cam_->width(), cam_->height(), Config::gridSize(), Config::nPyrLevels()));
-  DepthFilter::callback_t depth_filter_cb = boost::bind(
-      &MapPointCandidates::newCandidatePoint, &map_.point_candidates_, _1, _2);
+  DepthFilter::callback_t depth_filter_cb = boost::bind(//深度滤波器
+      &MapPointCandidates::newCandidatePoint, &map_.point_candidates_, _1, _2);//用map地图的候选点，构建深度滤波器
   depth_filter_ = new DepthFilter(feature_detector, depth_filter_cb);
-  depth_filter_->startThread();
+  depth_filter_->startThread();//开启深度滤波器
 }
 
 FrameHandlerMono::~FrameHandlerMono()

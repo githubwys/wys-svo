@@ -56,7 +56,7 @@ public:
   void remoteKeyCb(const std_msgs::StringConstPtr& key_input);
 };
 
-VoNode::VoNode() :
+VoNode::VoNode() ://vonode类的实例化
   vo_(NULL),
   publish_markers_(vk::getParam<bool>("svo/publish_markers", true)),
   publish_dense_input_(vk::getParam<bool>("svo/publish_dense_input", false)),
@@ -65,10 +65,12 @@ VoNode::VoNode() :
   quit_(false)
 {
   // Start user input thread in parallel thread that listens to console keys
+  // 开启输入线程
   if(vk::getParam<bool>("svo/accept_console_user_input", true))
     user_input_thread_ = boost::make_shared<vk::UserInputThread>();
 
   // Create Camera
+  // vikit加载相机，ros方法
   if(!vk::camera_loader::loadFromRosNs("svo", cam_))
     throw std::runtime_error("Camera model not correctly specified.");
 
@@ -82,8 +84,8 @@ VoNode::VoNode() :
                       vk::getParam<double>("svo/init_tz", 0.0)));
 
   // Init VO and start
-  vo_ = new svo::FrameHandlerMono(cam_);
-  vo_->start();
+  vo_ = new svo::FrameHandlerMono(cam_);////FrameHandlerMono类的初始化，单目帧处理
+  vo_->start();// bool start=true ,svo开始运行
 }
 
 VoNode::~VoNode()
@@ -96,14 +98,14 @@ VoNode::~VoNode()
 
 void VoNode::imgCb(const sensor_msgs::ImageConstPtr& msg)
 {
-  cv::Mat img;
+  cv::Mat img;//img 格式转换，从ros img 到OpenCV img
   try {
     img = cv_bridge::toCvShare(msg, "mono8")->image;
   } catch (cv_bridge::Exception& e) {
     ROS_ERROR("cv_bridge exception: %s", e.what());
   }
   processUserActions();
-  vo_->addImage(img, msg->header.stamp.toSec());
+  vo_->addImage(img, msg->header.stamp.toSec());//添加img
   visualizer_.publishMinimal(img, vo_->lastFrame(), *vo_, msg->header.stamp.toSec());
 
   if(publish_markers_ && vo_->stage() != FrameHandlerBase::STAGE_PAUSED)
@@ -163,9 +165,10 @@ int main(int argc, char **argv)
   // subscribe to cam msgs
   std::string cam_topic(vk::getParam<std::string>("svo/cam_topic", "camera/image_raw"));
   image_transport::ImageTransport it(nh);
+  //收到图像就运行imgCb和vo_node
   image_transport::Subscriber it_sub = it.subscribe(cam_topic, 5, &svo::VoNode::imgCb, &vo_node);
 
-  // subscribe to remote input
+  // subscribe to remote input  //输入参数
   vo_node.sub_remote_key_ = nh.subscribe("svo/remote_key", 5, &svo::VoNode::remoteKeyCb, &vo_node);
 
   // start processing callbacks

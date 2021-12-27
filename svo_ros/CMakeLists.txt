@@ -73,7 +73,7 @@ ADD_LIBRARY(svo_visualizer src/visualizer.cpp)
 TARGET_LINK_LIBRARIES(svo_visualizer ${LINK_LIBS})
                                  
 # Create Executables                      
-ADD_EXECUTABLE(vo src/vo_node.cpp)
+ADD_EXECUTABLE(vo src/vo_node.cpp)#vo为可执行文件，对应roslaunch中的type="vo"
 TARGET_LINK_LIBRARIES(vo svo_visualizer)
 ADD_EXECUTABLE(benchmark src/benchmark_node.cpp)
 TARGET_LINK_LIBRARIES(benchmark svo_visualizer)
