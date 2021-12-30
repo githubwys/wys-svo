@@ -37,6 +37,7 @@ typedef list<Feature*> Features;
 typedef vector<cv::Mat> ImgPyr;
 
 /// A frame saves the image, the associated features and the estimated pose.
+// 帧存储：图像，相关的特征，和估计的位姿
 class Frame : boost::noncopyable
 {
 public:

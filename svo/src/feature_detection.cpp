@@ -64,8 +64,8 @@ FastDetector::FastDetector(
 {}
 
 void FastDetector::detect(
-    Frame* frame,
-    const ImgPyr& img_pyr,
+    Frame* frame,//帧的指针
+    const ImgPyr& img_pyr,//图像金字塔
     const double detection_threshold,
     Features& fts)
 {

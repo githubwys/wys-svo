@@ -97,6 +97,7 @@ public:
   static double& kfSelectMinDist() { return getInstance().kfselect_mindist; }
 
   /// Select only features with a minimum Harris corner score for triangulation.
+  // 选择最好的特征，有最小的用于三角化的Harris角点分数
   static double& triangMinCornerScore() { return getInstance().triang_min_corner_score; }
 
   /// Subpixel refinement of reprojection and triangulation. Set to 0 if no subpix refinement required!

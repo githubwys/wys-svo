@@ -22,10 +22,11 @@
 
 namespace svo {
 
-/// Implementation of various feature detectors.
+/// Implementation of various feature detectors.//实现各种特征检测
 namespace feature_detection {
 
 /// Temporary container used for corner detection. Features are initialized from these.
+// 角点检测的临时容器
 struct Corner
 {
   int x;        //!< x-coordinate of corner in the image.
@@ -40,6 +41,7 @@ struct Corner
 typedef vector<Corner> Corners;
 
 /// All detectors should derive from this abstract class.
+////所有检测器的抽象类
 class AbstractDetector
 {
 public:
@@ -51,7 +53,7 @@ public:
 
   virtual ~AbstractDetector() {};
 
-  virtual void detect(
+  virtual void detect(//检测函数
       Frame* frame,
       const ImgPyr& img_pyr,
       const double detection_threshold,
@@ -83,6 +85,7 @@ protected:
 typedef boost::shared_ptr<AbstractDetector> DetectorPtr;
 
 /// FAST detector by Edward Rosten.
+//Fast角点检测
 class FastDetector : public AbstractDetector
 {
 public:

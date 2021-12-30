@@ -29,19 +29,28 @@ namespace initialization {
 InitResult KltHomographyInit::addFirstFrame(FramePtr frame_ref)
 {
   reset();
-  detectFeatures(frame_ref, px_ref_, f_ref_);
+  detectFeatures(frame_ref, px_ref_, f_ref_);//先检测FAST特征点和边缘特征
   if(px_ref_.size() < 100)
   {
+    // 第一帧图像需要100+特征，否则在纹理更丰富的环境中继续尝试。
     SVO_WARN_STREAM_THROTTLE(2.0, "First image has less than 100 features. Retry in more textured environment.");
     return FAILURE;
   }
   frame_ref_ = frame_ref;
+  //px_cur_ 当前帧的2D点  // px_ref_ 参考帧（前一帧）的2D点
   px_cur_.insert(px_cur_.begin(), px_ref_.begin(), px_ref_.end());
   return SUCCESS;
 }
 
+// processSecondFrame()用于跟第一张进行三角初始化
+// 从第一张图像开始，就用光流法持续跟踪特征点，
+// 把特征像素点转换成在相机坐标系下的深度归一化的点，并进行畸变校正,再让模变成1,映射到单位球面上面。
+// 如果匹配点的数量大于阈值，并且视差的中位数大于阈值。
+// 如果视差的方差大的话，选择计算E矩阵，如果视差的方差小的话，选择计算H矩阵。
+// 如果计算完H或E后，还有足够的内点，就认为这帧是合适的用来三角化的帧。根据H或E恢复出来的位姿和地图点，进行尺度变换，把深度的中值调为1。
 InitResult KltHomographyInit::addSecondFrame(FramePtr frame_cur)
 {
+  // 光流法返回视差
   trackKlt(frame_ref_, frame_cur, px_ref_, px_cur_, f_ref_, f_cur_, disparities_);
   SVO_INFO_STREAM("Init: KLT tracked "<< disparities_.size() <<" features");
 
@@ -66,6 +75,7 @@ InitResult KltHomographyInit::addSecondFrame(FramePtr frame_cur)
   }
 
   // Rescale the map such that the mean scene depth is equal to the specified scale
+  // 重新缩放贴图，使平均场景深度等于指定的比例
   vector<double> depth_vec;
   for(size_t i=0; i<xyz_in_cur_.size(); ++i)
     depth_vec.push_back((xyz_in_cur_[i]).z());
@@ -76,6 +86,7 @@ InitResult KltHomographyInit::addSecondFrame(FramePtr frame_cur)
       -frame_cur->T_f_w_.rotation_matrix()*(frame_ref_->pos() + scale*(frame_cur->pos() - frame_ref_->pos()));
 
   // For each inlier create 3D point and add feature in both frames
+  // 对于每个内插层，在两个框架中创建三维点并添加特征
   SE3 T_world_cur = frame_cur->T_f_w_.inverse();
   for(vector<int>::iterator it=inliers_.begin(); it!=inliers_.end(); ++it)
   {
@@ -104,17 +115,20 @@ void KltHomographyInit::reset()
   frame_ref_.reset();
 }
 
-void detectFeatures(
+void detectFeatures(//先检测FAST特征点和边缘特征
     FramePtr frame,
     vector<cv::Point2f>& px_vec,
     vector<Vector3d>& f_vec)
 {
   Features new_features;
-  feature_detection::FastDetector detector(
+  feature_detection::FastDetector detector(  // 初始化Fast角点检测器
       frame->img().cols, frame->img().rows, Config::gridSize(), Config::nPyrLevels());
+  // 调用detector的函数detect()
   detector.detect(frame.get(), frame->img_pyr_, Config::triangMinCornerScore(), new_features);
 
   // now for all maximum corners, initialize a new seed
+  // 初始化seed，用于深度滤波器
+  // reverse() 链表的逆序
   px_vec.clear(); px_vec.reserve(new_features.size());
   f_vec.clear(); f_vec.reserve(new_features.size());
   std::for_each(new_features.begin(), new_features.end(), [&](Feature* ftr){
@@ -124,7 +138,7 @@ void detectFeatures(
   });
 }
 
-void trackKlt(
+void trackKlt( // opencv光流法跟踪
     FramePtr frame_ref,
     FramePtr frame_cur,
     vector<cv::Point2f>& px_ref,
@@ -140,6 +154,9 @@ void trackKlt(
   vector<float> error;
   vector<float> min_eig_vec;
   cv::TermCriteria termcrit(cv::TermCriteria::COUNT+cv::TermCriteria::EPS, klt_max_iter, klt_eps);
+  // cv::calcOpticalFlowPyrLK() 
+  // Calculates an optical flow for a sparse feature set using the iterative Lucas-Kanade method with pyramids.
+  // 使用金字塔的迭代Lucas Kanade方法计算稀疏特征的光流
   cv::calcOpticalFlowPyrLK(frame_ref->img_pyr_[0], frame_cur->img_pyr_[0],
                            px_ref, px_cur,
                            status, error,
@@ -168,7 +185,7 @@ void trackKlt(
   }
 }
 
-void computeHomography(
+void computeHomography( // 初始化：计算单应矩阵
     const vector<Vector3d>& f_ref,
     const vector<Vector3d>& f_cur,
     double focal_length,
