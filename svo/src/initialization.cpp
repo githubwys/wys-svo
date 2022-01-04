@@ -54,21 +54,24 @@ InitResult KltHomographyInit::addSecondFrame(FramePtr frame_cur)
   trackKlt(frame_ref_, frame_cur, px_ref_, px_cur_, f_ref_, f_cur_, disparities_);
   SVO_INFO_STREAM("Init: KLT tracked "<< disparities_.size() <<" features");
 
-  if(disparities_.size() < Config::initMinTracked())
+  // 返回的有视差的点少于50个，视为失败
+  if(disparities_.size() < Config::initMinTracked())// config.cpp : (("init_min_tracked", 50)),
     return FAILURE;
 
-  double disparity = vk::getMedian(disparities_);
-  SVO_INFO_STREAM("Init: KLT "<<disparity<<"px average disparity.");
-  if(disparity < Config::initMinDisparity())
+  double disparity = vk::getMedian(disparities_);// 并且视差的中位数
+  SVO_INFO_STREAM("Init: KLT "<<disparity<<"px average disparity.");//SVO_INFO_STREAM:cerr：输出到标准错误的ostream对象，常用于程序错误信息；
+  // 视差中位数不能小于initMinDisparity=50，才有关键帧
+  if(disparity < Config::initMinDisparity())// (("svo/init_min_disparity", 50.0)),
     return NO_KEYFRAME;
 
+  // 计算单应矩阵
   computeHomography(
       f_ref_, f_cur_,
       frame_ref_->cam_->errorMultiplier2(), Config::poseOptimThresh(),
       inliers_, xyz_in_cur_, T_cur_from_ref_);
   SVO_INFO_STREAM("Init: Homography RANSAC "<<inliers_.size()<<" inliers.");
 
-  if(inliers_.size() < Config::initMinInliers())
+  if(inliers_.size() < Config::initMinInliers()) //判断H阵中，两帧之间剩下的内点数量是否足够 ("svo/init_min_inliers", 40)
   {
     SVO_WARN_STREAM("Init WARNING: "<<Config::initMinInliers()<<" inliers minimum required.");
     return FAILURE;
@@ -79,8 +82,9 @@ InitResult KltHomographyInit::addSecondFrame(FramePtr frame_cur)
   vector<double> depth_vec;
   for(size_t i=0; i<xyz_in_cur_.size(); ++i)
     depth_vec.push_back((xyz_in_cur_[i]).z());
-  double scene_depth_median = vk::getMedian(depth_vec);
+  double scene_depth_median = vk::getMedian(depth_vec);// 计算中位数
   double scale = Config::mapScale()/scene_depth_median;
+  // 计算当前帧（第二个关键帧）的pose： 与第一个关键帧的Transform由computeHomography()得到，参数：T_cur_from_ref_
   frame_cur->T_f_w_ = T_cur_from_ref_ * frame_ref_->T_f_w_;
   frame_cur->T_f_w_.translation() =
       -frame_cur->T_f_w_.rotation_matrix()*(frame_ref_->pos() + scale*(frame_cur->pos() - frame_ref_->pos()));
@@ -92,21 +96,22 @@ InitResult KltHomographyInit::addSecondFrame(FramePtr frame_cur)
   {
     Vector2d px_cur(px_cur_[*it].x, px_cur_[*it].y);
     Vector2d px_ref(px_ref_[*it].x, px_ref_[*it].y);
+    // isInFrame()判断是不是inliers_点在frame范围中？
     if(frame_ref_->cam_->isInFrame(px_cur.cast<int>(), 10) && frame_ref_->cam_->isInFrame(px_ref.cast<int>(), 10) && xyz_in_cur_[*it].z() > 0)
     {
       Vector3d pos = T_world_cur * (xyz_in_cur_[*it]*scale);
       Point* new_point = new Point(pos);
 
-      Feature* ftr_cur(new Feature(frame_cur.get(), new_point, px_cur, f_cur_[*it], 0));
-      frame_cur->addFeature(ftr_cur);
-      new_point->addFrameRef(ftr_cur);
+      Feature* ftr_cur(new Feature(frame_cur.get(), new_point, px_cur, f_cur_[*it], 0)); // 特征结构的实例化
+      frame_cur->addFeature(ftr_cur); // 当前frame帧frame_cur添加特征ftr_cur
+      new_point->addFrameRef(ftr_cur); // 点point添加当前帧的依赖，注明点在哪一帧当中
 
-      Feature* ftr_ref(new Feature(frame_ref_.get(), new_point, px_ref, f_ref_[*it], 0));
-      frame_ref_->addFeature(ftr_ref);
-      new_point->addFrameRef(ftr_ref);
+      Feature* ftr_ref(new Feature(frame_ref_.get(), new_point, px_ref, f_ref_[*it], 0));  // 特征结构的实例化
+      frame_ref_->addFeature(ftr_ref); // 前一frame帧frame_ref_添加特征ftr_ref
+      new_point->addFrameRef(ftr_ref); // 点point添加前一帧的依赖，注明点在哪一帧当中
     }
   }
-  return SUCCESS;
+  return SUCCESS;//
 }
 
 void KltHomographyInit::reset()
@@ -138,7 +143,7 @@ void detectFeatures(//先检测FAST特征点和边缘特征
   });
 }
 
-void trackKlt( // opencv光流法跟踪
+void trackKlt( // opencv光流法跟踪  　Kanade-Lucas-Tomasi方法
     FramePtr frame_ref,
     FramePtr frame_cur,
     vector<cv::Point2f>& px_ref,
@@ -157,12 +162,15 @@ void trackKlt( // opencv光流法跟踪
   // cv::calcOpticalFlowPyrLK() 
   // Calculates an optical flow for a sparse feature set using the iterative Lucas-Kanade method with pyramids.
   // 使用金字塔的迭代Lucas Kanade方法计算稀疏特征的光流
-  cv::calcOpticalFlowPyrLK(frame_ref->img_pyr_[0], frame_cur->img_pyr_[0],
-                           px_ref, px_cur,
-                           status, error,
-                           cv::Size2i(klt_win_size, klt_win_size),
-                           4, termcrit, cv::OPTFLOW_USE_INITIAL_FLOW);
-
+  // 
+  cv::calcOpticalFlowPyrLK(frame_ref->img_pyr_[0], frame_cur->img_pyr_[0],// 初始图像；最终图像
+                           px_ref, px_cur, // 需要跟踪的点，点的新位置
+                           status, error, // status长度为points个数，值为0/1，表示对应点在第二张图像中是否发现 //error删除变化剧烈的点
+                           cv::Size2i(klt_win_size, klt_win_size),//定义了金字塔尺寸
+                           4, // 定义了金字塔层数 
+                           termcrit, // 终止迭代条件 
+                           cv::OPTFLOW_USE_INITIAL_FLOW); // =4：函数调用之前，数组B已包含特征点的初始坐标值。（flag对boolkeeping控制）
+  
   vector<cv::Point2f>::iterator px_ref_it = px_ref.begin();
   vector<cv::Point2f>::iterator px_cur_it = px_cur.begin();
   vector<Vector3d>::iterator f_ref_it = f_ref.begin();
@@ -170,15 +178,16 @@ void trackKlt( // opencv光流法跟踪
   disparities.clear(); disparities.reserve(px_cur.size());
   for(size_t i=0; px_ref_it != px_ref.end(); ++i)
   {
-    if(!status[i])
+    if(!status[i])// 删除找不到对应点的光流点，status=0则删除
     {
       px_ref_it = px_ref.erase(px_ref_it);
       px_cur_it = px_cur.erase(px_cur_it);
       f_ref_it = f_ref.erase(f_ref_it);
       continue;
     }
+    // c2f() //将像素坐标（c）转换为帧的单位球体坐标（f）。
     f_cur.push_back(frame_cur->c2f(px_cur_it->x, px_cur_it->y));
-    disparities.push_back(Vector2d(px_ref_it->x - px_cur_it->x, px_ref_it->y - px_cur_it->y).norm());
+    disparities.push_back(Vector2d(px_ref_it->x - px_cur_it->x, px_ref_it->y - px_cur_it->y).norm());//norm()它返回二范数
     ++px_ref_it;
     ++px_cur_it;
     ++f_ref_it;
@@ -189,7 +198,7 @@ void computeHomography( // 初始化：计算单应矩阵
     const vector<Vector3d>& f_ref,
     const vector<Vector3d>& f_cur,
     double focal_length,
-    double reprojection_threshold,
+    double reprojection_threshold, // 限差
     vector<int>& inliers,
     vector<Vector3d>& xyz_in_cur,
     SE3& T_cur_from_ref)
@@ -201,9 +210,12 @@ void computeHomography( // 初始化：计算单应矩阵
     uv_ref[i] = vk::project2d(f_ref[i]);
     uv_cur[i] = vk::project2d(f_cur[i]);
   }
+  // 初始化Homography类
   vk::Homography Homography(uv_ref, uv_cur, focal_length, reprojection_threshold);
+  // 计算单应矩阵
   Homography.computeSE3fromMatches();
   vector<int> outliers;
+  // 由单应矩阵计算两帧之间特征点的内点
   vk::computeInliers(f_cur, f_ref,
                      Homography.T_c2_from_c1.rotation_matrix(), Homography.T_c2_from_c1.translation(),
                      reprojection_threshold, focal_length,

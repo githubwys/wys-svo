@@ -173,16 +173,21 @@ bool getSceneDepth(const Frame& frame, double& depth_mean, double& depth_min)
   {
     if((*it)->point != NULL)
     {
+      // world2frame： w2f(参数：point的世界坐标系) 点坐标从世界坐标系转换到相机坐标系
+      // 计算代码很简单：T_f_w_ * xyz_w 
+      // z 为 相机坐标系中特征点的 3D 点的z值
       const double z = frame.w2f((*it)->point->pos_).z();
       depth_vec.push_back(z);
-      depth_min = fmin(z, depth_min);
+      depth_min = fmin(z, depth_min);// 求最小深度值
     }
   }
   if(depth_vec.empty())
   {
+    // 不能设置景深，frame帧不含有观测点
     SVO_WARN_STREAM("Cannot set scene depth. Frame has no point-observations!");
     return false;
   }
+  // depth_mean 获得深度的中位数
   depth_mean = vk::getMedian(depth_vec);
   return true;
 }

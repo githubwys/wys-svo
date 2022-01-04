@@ -90,16 +90,34 @@ void FrameHandlerMono::addImage(const cv::Mat& img, const double timestamp)
 
 FrameHandlerMono::UpdateResult FrameHandlerMono::processFirstFrame()
 {
+  // 初始化当前帧的pose：R+T：T_f_w_ 为空
   new_frame_->T_f_w_ = SE3(Matrix3d::Identity(), Vector3d::Zero());
   if(klt_homography_init_.addFirstFrame(new_frame_) == initialization::FAILURE)
     return RESULT_NO_KEYFRAME;
   new_frame_->setKeyframe();
+  // 把关键帧加入地图中
   map_.addKeyframe(new_frame_);
   stage_ = STAGE_SECOND_FRAME;
   SVO_INFO_STREAM("Init: Selected first frame.");
   return RESULT_IS_KEYFRAME;
 }
 
+//图像刚进来的时候，就获取它的金字塔图像，5层，比例为2。
+//
+//然后处理第一张图像，processFirstFrame()。先检测FAST特征点和边缘特征。如果图像中间的特征点数量超过50个，就把这张图像作为第一个关键帧。
+//
+//然后处理第一张之后的连续图像，processSecondFrame()，用于跟第一张进行三角初始化。
+//从第一张图像开始，就用光流法持续跟踪特征点，把特征像素点转换成在相机坐标系下的深度归一化的点，并进行畸变校正,再让模变成1,映射到单位球面上面。
+//
+//如果匹配点的数量大于阈值，并且视差的中位数大于阈值。如果视差的方差大的话，选择计算E矩阵，
+//如果视差的方差小的话，选择计算H矩阵。如果计算完H或E后，还有足够的内点，就认为这帧是合适的用来三角化的帧。
+//根据H或E恢复出来的位姿和地图点，进行尺度变换，把深度的中值调为1。
+//
+//然后把这一帧，作为关键帧，送入到深度滤波器中。（就是送到的深度滤波器的updateSeedsLoop()线程中。
+//深度滤波器来给种子点在极线上搜索匹配点，更新种子点，种子点收敛出新的候选地图点。
+//如果是关键帧的话，就初始化出新的种子点，在这帧图像里面每层的每个25x25大小的网格里，取一个最大的fast点。在第0层图像上，找出canny边缘点。）
+//
+//之后就是正常的跟踪processFrame()。
 FrameHandlerBase::UpdateResult FrameHandlerMono::processSecondFrame()
 {
   initialization::InitResult res = klt_homography_init_.addSecondFrame(new_frame_);
@@ -113,35 +131,46 @@ FrameHandlerBase::UpdateResult FrameHandlerMono::processSecondFrame()
   ba::twoViewBA(new_frame_.get(), map_.lastKeyframe().get(), Config::lobaThresh(), &map_);
 #endif
 
+  // 把新的一帧设为关键帧
   new_frame_->setKeyframe();
   double depth_mean, depth_min;
+  // 计算frame中3D特征点的深度的 中位数和最小值
   frame_utils::getSceneDepth(*new_frame_, depth_mean, depth_min);
+  // 深度滤波器添加该关键帧 （然后把这一帧，作为关键帧，送入到深度滤波器中）
   depth_filter_->addKeyframe(new_frame_, depth_mean, 0.5*depth_min);
 
   // add frame to map
+  // 把关键帧加入地图中
   map_.addKeyframe(new_frame_);
   stage_ = STAGE_DEFAULT_FRAME;
+  // 重置klt_homography_init_：用于通过估计单应性来估计前两个关键帧的姿势，为之后再用klt_homography做准备
   klt_homography_init_.reset();
   SVO_INFO_STREAM("Init: Selected second frame, triangulated initial map.");
   return RESULT_IS_KEYFRAME;
 }
 
+// 正常的跟踪processFrame()
 FrameHandlerBase::UpdateResult FrameHandlerMono::processFrame()
 {
   // Set initial pose TODO use prior
+  // 设置初始的新的一帧的位姿pose：T_f_w_ 世界坐标系到当前真的转换 = 上一帧的pose
   new_frame_->T_f_w_ = last_frame_->T_f_w_;
 
   // sparse image align
+  // 稀疏图像对齐
   SVO_START_TIMER("sparse_img_align");
   SparseImgAlign img_align(Config::kltMaxLevel(), Config::kltMinLevel(),
                            30, SparseImgAlign::GaussNewton, false, false);
+  // 运行稀疏图像对齐                         
   size_t img_align_n_tracked = img_align.run(last_frame_, new_frame_);
   SVO_STOP_TIMER("sparse_img_align");
   SVO_LOG(img_align_n_tracked);
   SVO_DEBUG_STREAM("Img Align:\t Tracked = " << img_align_n_tracked);
 
   // map reprojection & feature alignment
+  // 地图重投影和特征对齐
   SVO_START_TIMER("reproject");
+  // 地图重投影
   reprojector_.reprojectMap(new_frame_, overlap_kfs_);
   SVO_STOP_TIMER("reproject");
   const size_t repr_n_new_references = reprojector_.n_matches_;
@@ -151,15 +180,19 @@ FrameHandlerBase::UpdateResult FrameHandlerMono::processFrame()
   if(repr_n_new_references < Config::qualityMinFts())
   {
     SVO_WARN_STREAM_THROTTLE(1.0, "Not enough matched features.");
+    // 重置以避免疯狂的姿势跳跃
     new_frame_->T_f_w_ = last_frame_->T_f_w_; // reset to avoid crazy pose jumps
+    // 跟踪质量=不好
     tracking_quality_ = TRACKING_INSUFFICIENT;
     return RESULT_FAILURE;
   }
 
   // pose optimization
+  // 位姿估计
   SVO_START_TIMER("pose_optimizer");
   size_t sfba_n_edges_final;
   double sfba_thresh, sfba_error_init, sfba_error_final;
+  // 高斯牛顿法 ：位姿优化？
   pose_optimizer::optimizeGaussNewton(
       Config::poseOptimThresh(), Config::poseOptimNumIter(), false,
       new_frame_, sfba_thresh, sfba_error_init, sfba_error_final, sfba_n_edges_final);
@@ -171,11 +204,13 @@ FrameHandlerBase::UpdateResult FrameHandlerMono::processFrame()
     return RESULT_FAILURE;
 
   // structure optimization
+  // 结构优化：优化一些观察到的3D点。
   SVO_START_TIMER("point_optimizer");
   optimizeStructure(new_frame_, Config::structureOptimMaxPts(), Config::structureOptimNumIter());
   SVO_STOP_TIMER("point_optimizer");
 
   // select keyframe
+  // 选择关键帧
   core_kfs_.insert(new_frame_);
   setTrackingQuality(sfba_n_edges_final);
   if(tracking_quality_ == TRACKING_INSUFFICIENT)
@@ -194,12 +229,14 @@ FrameHandlerBase::UpdateResult FrameHandlerMono::processFrame()
   SVO_DEBUG_STREAM("New keyframe selected.");
 
   // new keyframe selected
+  // 新的关键帧选择
   for(Features::iterator it=new_frame_->fts_.begin(); it!=new_frame_->fts_.end(); ++it)
     if((*it)->point != NULL)
       (*it)->point->addFrameRef(*it);
   map_.point_candidates_.addCandidatePointToFrame(new_frame_);
 
   // optional bundle adjustment
+  // 可选择光束法
 #ifdef USE_BUNDLE_ADJUSTMENT
   if(Config::lobaNumIter() > 0)
   {
@@ -218,9 +255,11 @@ FrameHandlerBase::UpdateResult FrameHandlerMono::processFrame()
 #endif
 
   // init new depth-filters
+  // 初始化深度滤波器
   depth_filter_->addKeyframe(new_frame_, depth_mean, 0.5*depth_min);
 
   // if limited number of keyframes, remove the one furthest apart
+  // ？？？？？？如果关键帧数量有限，请删除相距最远的关键帧
   if(Config::maxNKfs() > 2 && map_.size() >= Config::maxNKfs())
   {
     FramePtr furthest_frame = map_.getFurthestKeyframe(new_frame_->pos());
@@ -229,6 +268,7 @@ FrameHandlerBase::UpdateResult FrameHandlerMono::processFrame()
   }
 
   // add keyframe to map
+  // 地图添加关键帧
   map_.addKeyframe(new_frame_);
 
   return RESULT_IS_KEYFRAME;

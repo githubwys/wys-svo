@@ -42,23 +42,33 @@ public:
   void reset();
 
 protected:
+  // 参考帧中需要跟踪的关键点
   vector<cv::Point2f> px_ref_;      //!< keypoints to be tracked in reference frame.
+  // 当前帧中的跟踪的关键点
   vector<cv::Point2f> px_cur_;      //!< tracked keypoints in current frame.
+  // 参考帧当中的关键点的方向向量
   vector<Vector3d> f_ref_;          //!< bearing vectors corresponding to the keypoints in the reference image.
+  // 当前帧当中的关键点的方向向量
   vector<Vector3d> f_cur_;          //!< bearing vectors corresponding to the keypoints in the current image.
+  // 前两帧的视差
   vector<double> disparities_;      //!< disparity between first and second frame.
+  // 几何检查后的内点
   vector<int> inliers_;             //!< inliers after the geometric check (e.g., Homography).
+  // 几何检查时计算的三维点
   vector<Vector3d> xyz_in_cur_;     //!< 3D points computed during the geometric check.
+  // 前两帧之间计算的变换
   SE3 T_cur_from_ref_;              //!< computed transformation between the first two frames.
 };
 
 /// Detect Fast corners in the image.
+// 检测图像中的Fast角点
 void detectFeatures(
     FramePtr frame,
     vector<cv::Point2f>& px_vec,
     vector<Vector3d>& f_vec);
 
 /// Compute optical flow (Lucas Kanade) for selected keypoints.
+// 计算选中关键点的光流
 void trackKlt(
     FramePtr frame_ref,
     FramePtr frame_cur,

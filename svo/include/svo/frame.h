@@ -42,18 +42,30 @@ class Frame : boost::noncopyable
 {
 public:
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-    
+
+  // 已经创建的frame  
   static int                    frame_counter_;         //!< Counts the number of created frames. Used to set the unique id.
+  // 每个frame的id
   int                           id_;                    //!< Unique id of the frame.
+  // 每张图像的拍摄时间戳
   double                        timestamp_;             //!< Timestamp of when the image was recorded.
+  // 相机模型
   vk::AbstractCamera*           cam_;                   //!< Camera model.
+  // 从世界坐标系转到frame坐标系  SE3：李群，特殊欧式群 ： 表示 R+T
   Sophus::SE3                   T_f_w_;                 //!< Transform (f)rame from (w)orld.
+  // 协方差
   Matrix<double, 6, 6>          Cov_;                   //!< Covariance.
+  // 图像金字塔
   ImgPyr                        img_pyr_;               //!< Image Pyramid.
+  // 图像内的特征
   Features                      fts_;                   //!< List of features in the image.
+  // 五个特征和关联的3D点，用于检测两帧是否具有重叠的视野。
   vector<Feature*>              key_pts_;               //!< Five features and associated 3D points which are used to detect if two frames have overlapping field of view.
+  // 关键帧判断
   bool                          is_keyframe_;           //!< Was this frames selected as keyframe?
+  // 指向关键帧的g2o节点对象的临时指针。
   g2oFrameSE3*                  v_kf_;                  //!< Temporary pointer to the g2o node object of the keyframe.
+  // 发布时间
   int                           last_published_ts_;     //!< Timestamp of last publishing.
 
   Frame(vk::AbstractCamera* cam, const cv::Mat& img, double timestamp);

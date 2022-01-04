@@ -22,7 +22,8 @@
 namespace svo {
 
 /// A salient image region that is tracked across frames.
-struct Feature
+// 跨帧跟踪的显著图像区域。
+struct Feature // 特征类
 {
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
@@ -31,15 +32,22 @@ struct Feature
     EDGELET
   };
 
+  // 类型可以是角或边
   FeatureType type;     //!< Type can be corner or edgelet.
+  // 指针指向特征被检测出来的帧
   Frame* frame;         //!< Pointer to frame in which the feature was detected.
+  // 特征在0级图像金字塔的像素坐标
   Vector2d px;          //!< Coordinates in pixels on pyramid level 0.
+  // 特征的单位方向向量
   Vector3d f;           //!< Unit-bearing vector of the feature.
+  // 特征被提取出来的图像金字塔层数
   int level;            //!< Image pyramid level where feature was extracted.
+  // 指向与特征相关的3D点的指针
   Point* point;         //!< Pointer to 3D point which corresponds to the feature.
+  // 归一化的，边缘特征的主梯度方向
   Vector2d grad;        //!< Dominant gradient direction for edglets, normalized.
 
-  Feature(Frame* _frame, const Vector2d& _px, int _level) :
+  Feature(Frame* _frame, const Vector2d& _px, int _level) : // 特征结构的初始化
     type(CORNER),
     frame(_frame),
     px(_px),
@@ -49,7 +57,7 @@ struct Feature
     grad(1.0,0.0)
   {}
 
-  Feature(Frame* _frame, const Vector2d& _px, const Vector3d& _f, int _level) :
+  Feature(Frame* _frame, const Vector2d& _px, const Vector3d& _f, int _level) :  // 特征结构的初始化
     type(CORNER),
     frame(_frame),
     px(_px),
@@ -59,7 +67,7 @@ struct Feature
     grad(1.0,0.0)
   {}
 
-  Feature(Frame* _frame, Point* _point, const Vector2d& _px, const Vector3d& _f, int _level) :
+  Feature(Frame* _frame, Point* _point, const Vector2d& _px, const Vector3d& _f, int _level) :  // 特征结构的初始化
     type(CORNER),
     frame(_frame),
     px(_px),

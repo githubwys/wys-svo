@@ -40,7 +40,7 @@ public:
 
   cv::Mat resimg_;
 
-  SparseImgAlign(
+  SparseImgAlign( // 类的初始化
       int n_levels,
       int min_level,
       int n_iter,
