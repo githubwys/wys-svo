@@ -68,16 +68,19 @@ void Reprojector::reprojectMap(
   resetGrid();
 
   // Identify those Keyframes which share a common field of view.
+  // 识别共享公共视野的关键帧。
   SVO_START_TIMER("reproject_kfs");
   list< pair<FramePtr,double> > close_kfs;
   map_.getCloseKeyframes(frame, close_kfs);
 
   // Sort KFs with overlap according to their closeness
+  // 根据关键帧KF的接近程度对关键帧KF进行重叠排序
   close_kfs.sort(boost::bind(&std::pair<FramePtr, double>::second, _1) <
                  boost::bind(&std::pair<FramePtr, double>::second, _2));
 
   // Reproject all mappoints of the closest N kfs with overlap. We only store
   // in which grid cell the points fall.
+  // 使用重叠重新投影最近N 个关键帧KF的所有贴图点。我们只存储点落在哪个网格单元中。
   size_t n = 0;
   overlap_kfs.reserve(options_.max_n_kfs);
   for(auto it_frame=close_kfs.begin(), ite_frame=close_kfs.end();
@@ -87,14 +90,17 @@ void Reprojector::reprojectMap(
     overlap_kfs.push_back(pair<FramePtr,size_t>(ref_frame,0));
 
     // Try to reproject each mappoint that the other KF observes
+    // 尝试重新投影其他关键帧KF观察到的每个映射点
     for(auto it_ftr=ref_frame->fts_.begin(), ite_ftr=ref_frame->fts_.end();
         it_ftr!=ite_ftr; ++it_ftr)
     {
       // check if the feature has a mappoint assigned
+      //检查要素是否已指定贴图点
       if((*it_ftr)->point == NULL)
         continue;
 
       // make sure we project a point only once
+      //确保我们只投射一个点一次
       if((*it_ftr)->point->last_projected_kf_id_ == frame->id_)
         continue;
       (*it_ftr)->point->last_projected_kf_id_ = frame->id_;
@@ -105,6 +111,7 @@ void Reprojector::reprojectMap(
   SVO_STOP_TIMER("reproject_kfs");
 
   // Now project all point candidates
+  //现在投射所有候选点
   SVO_START_TIMER("reproject_candidates");
   {
     boost::unique_lock<boost::mutex> lock(map_.point_candidates_.mut_);
@@ -123,15 +130,18 @@ void Reprojector::reprojectMap(
       }
       ++it;
     }
-  } // unlock the mutex when out of scope
+  } // unlock the mutex when out of scope//超出范围时解锁互斥锁
   SVO_STOP_TIMER("reproject_candidates");
 
   // Now we go through each grid cell and select one point to match.
   // At the end, we should have at maximum one reprojected point per cell.
+  //现在，我们遍历每个网格单元并选择一个要匹配的点。
+  //最后，每个格网最多应该有一个重投投影点。
   SVO_START_TIMER("feature_align");
   for(size_t i=0; i<grid_.cells.size(); ++i)
   {
     // we prefer good quality points over unkown quality (more likely to match)
+    //我们更喜欢好的质量的点而不是未知质量的点（更可能匹配）
     // and unknown quality over candidates (position not optimized)
     if(reprojectCell(*grid_.cells.at(grid_.cell_order[i]), frame))
       ++n_matches_;
@@ -179,11 +189,14 @@ bool Reprojector::reprojectCell(Cell& cell, FramePtr frame)
     if(it->pt->type_ == Point::TYPE_UNKNOWN && it->pt->n_succeeded_reproj_ > 10)
       it->pt->type_ = Point::TYPE_GOOD;
 
+    // 提取image的特征
     Feature* new_feature = new Feature(frame.get(), it->px, matcher_.search_level_);
     frame->addFeature(new_feature);
 
     // Here we add a reference in the feature to the 3D point, the other way
     // round is only done if this frame is selected as keyframe.
+    //在这里，我们以另一种方式将特征中的参照添加到三维点
+    //仅当此帧被选为关键帧时，才会执行舍入。
     new_feature->point = it->pt;
 
     if(matcher_.ref_ftr_->type == Feature::EDGELET)
@@ -195,6 +208,7 @@ bool Reprojector::reprojectCell(Cell& cell, FramePtr frame)
 
     // If the keyframe is selected and we reproject the rest, we don't have to
     // check this point anymore.
+    // 如果选择关键帧并重新投影其余的关键帧，则无需再检查该点。
     it = cell.erase(it);
 
     // Maximum one point per cell.

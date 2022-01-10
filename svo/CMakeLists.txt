@@ -2,7 +2,8 @@
 # user build settings
 
 SET(TRACE TRUE)
-SET(HAVE_G2O FALSE) 
+# SET(HAVE_G2O FALSE)
+SET(HAVE_G2O TRUE) 
 SET(USE_ROS TRUE) # Set FALSE if you want to build this package without Catkin
 SET(DEBUG_OUTPUT FALSE) # Only relevant if build without ROS
 
@@ -109,17 +110,41 @@ LIST(APPEND SOURCEFILES
   src/config.cpp
   src/sparse_img_align.cpp)
 
+# # Add g2o if available
+# IF(HAVE_G2O)
+#   #set(G2O_DIR "/home/wys/pkg/g2o/g2o/install/lib/cmake/g2o")
+#   #set(G2O_DIR "/home/wys/slam/SVO/ws/g2o-20160424_git/install")
+#   FIND_PACKAGE(G2O REQUIRED)
+#   INCLUDE_DIRECTORIES(
+#     ${G2O_INCLUDE_DIR}
+#     /usr/include/suitesparse # for cholmod
+#   )
+#   LIST(APPEND LINK_LIBS
+#     ${G2O_CORE_LIBRARY} ${G2O_STUFF_LIBRARY} ${G2O_SOLVER_CHOLMOD} ${G2O_SOLVER_CSPARSE} ${G2O_SOLVER_DENSE}
+#     ${G2O_SOLVER_PCG} ${G2O_TYPES_SBA} cholmod cxsparse
+#   )
+#   LIST(APPEND SOURCEFILES src/bundle_adjustment.cpp)
+# ENDIF(HAVE_G2O)
+
 # Add g2o if available
+# g2o version g2o-20160424_git
 IF(HAVE_G2O)
-  set(G20_DIR "/home/wys/slam/SVO/ws/g2o-20160424_git/install")
-  FIND_PACKAGE(G2O REQUIRED)
+  #set(G2O_DIR "/home/wys/pkg/g2o/g2o/install/lib/cmake/g2o")
+  #set(G2O_DIR "/home/wys/slam/SVO/ws/g2o-20160424_git/install")
+  # FIND_PACKAGE(G2O REQUIRED)
   INCLUDE_DIRECTORIES(
-    ${G2O_INCLUDE_DIR}
-    /usr/include/suitesparse # for cholmod
+    "/home/wys/slam/SVO/ws/g2o-20160424_git/install/include"
+    "/usr/include/suitesparse" # for cholmod
   )
   LIST(APPEND LINK_LIBS
-    ${G2O_CORE_LIBRARY} ${G2O_STUFF_LIBRARY} ${G2O_SOLVER_CHOLMOD} ${G2O_SOLVER_CSPARSE} ${G2O_SOLVER_DENSE}
-    ${G2O_SOLVER_PCG} ${G2O_TYPES_SBA} cholmod cxsparse
+    "/home/wys/slam/SVO/ws/g2o-20160424_git/install/lib/libg2o_csparse_extension.so" 
+    "/home/wys/slam/SVO/ws/g2o-20160424_git/install/lib/libg2o_core.so"
+    "/home/wys/slam/SVO/ws/g2o-20160424_git/install/lib/libg2o_stuff.so"
+    "/home/wys/slam/SVO/ws/g2o-20160424_git/install/lib/libg2o_solver_csparse.so"
+    "/home/wys/slam/SVO/ws/g2o-20160424_git/install/lib/libg2o_solver_dense.so"
+    "/home/wys/slam/SVO/ws/g2o-20160424_git/install/lib/libg2o_solver_pcg.so"
+    "/home/wys/slam/SVO/ws/g2o-20160424_git/install/lib/libg2o_types_sba.so"
+    cholmod cxsparse
   )
   LIST(APPEND SOURCEFILES src/bundle_adjustment.cpp)
 ENDIF(HAVE_G2O)

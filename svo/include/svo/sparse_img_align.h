@@ -30,11 +30,12 @@ namespace svo {
 class Feature;
 
 /// Optimize the pose of the frame by minimizing the photometric error of feature patches.
+// 通过最小化特征面片的光度误差来优化帧的姿势。
 class SparseImgAlign : public vk::NLLSSolver<6, SE3>
 {
-  static const int patch_halfsize_ = 2;
-  static const int patch_size_ = 2*patch_halfsize_;
-  static const int patch_area_ = patch_size_*patch_size_;
+  static const int patch_halfsize_ = 2; //图像块的半径 2
+  static const int patch_size_ = 2*patch_halfsize_; //图像块边长 4
+  static const int patch_area_ = patch_size_*patch_size_; //图像块的面积 4*4
 public:
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 

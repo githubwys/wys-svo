@@ -36,7 +36,7 @@ SparseImgAlign::SparseImgAlign(
   n_iter_ = n_iter;
   n_iter_init_ = n_iter_;
   method_ = method;
-  verbose_ = verbose;
+  verbose_ = verbose;// verbose 冗长的? 
   eps_ = 0.000001;
 }
 
@@ -50,12 +50,28 @@ size_t SparseImgAlign::run(FramePtr ref_frame, FramePtr cur_frame)
     return 0;
   }
 
+  // 函数内复制参数
   ref_frame_ = ref_frame;
   cur_frame_ = cur_frame;
+  // 创建图块，每个图块大小为16像素
+  // 创建n行16列的矩阵ref_patch_cache_：矩阵n*16
+  // fts_ 为 图像内的特征列表 List of features in the image.
+  // cache 存储
   ref_patch_cache_ = cv::Mat(ref_frame_->fts_.size(), patch_area_, CV_32F);
+  // 创建6行n*16列的矩阵:矩阵：6*（n*16）
+  // 6行：pose有6个参数，对pose的每个参数求一阶导数，构成矩阵
+  // 代表图块上的每个像素点误差对相机位姿的雅克比。雅可比矩阵是一阶偏导数以一定方式排列成的矩阵
+  // 创建时：Matrix<double, 6, Dynamic, ColMajor> jacobian_cache_; 用时resize()
   jacobian_cache_.resize(Eigen::NoChange, ref_patch_cache_.rows*patch_area_);
-  visible_fts_.resize(ref_patch_cache_.rows, false); // TODO: should it be reset at each level?
+  // TODO: should it be reset at each level?
+  // 需不需要对每一层金字塔都清除，reset
+  // fts:features
+  visible_fts_.resize(ref_patch_cache_.rows, false); 
 
+  // 李群SE3的计算
+  // SE3:matrix.inverse()：矩阵求逆
+  // 世界到当前帧frame的SE3 * 世界到参考帧frame的SE3的逆阵  =  从参考帧到当前帧的李群SE3 ： 确实
+  // 要优化的是参考帧相对于当前帧的位姿:T_cur_from_ref
   SE3 T_cur_from_ref(cur_frame_->T_f_w_ * ref_frame_->T_f_w_.inverse());
 
   for(level_=max_level_; level_>=min_level_; --level_)
@@ -65,6 +81,7 @@ size_t SparseImgAlign::run(FramePtr ref_frame, FramePtr cur_frame)
     have_ref_patch_cache_ = false;
     if(verbose_)
       printf("\nPYRAMID LEVEL %i\n---------------\n", level_);
+    //调用GaussNewton或LevenbergMarquardt优化策略
     optimize(T_cur_from_ref);
   }
   cur_frame_->T_f_w_ = T_cur_from_ref * ref_frame_->T_f_w_;
@@ -81,6 +98,7 @@ Matrix<double, 6, 6> SparseImgAlign::getFisherInformation()
   return I;
 }
 
+// 预计算参考块
 void SparseImgAlign::precomputeReferencePatches()
 {
   const int border = patch_halfsize_+1;
@@ -104,14 +122,17 @@ void SparseImgAlign::precomputeReferencePatches()
     *visiblity_it = true;
 
     // cannot just take the 3d points coordinate because of the reprojection errors in the reference image!!!
+    // 由于参考图像中的重投影错误，无法直接仅获取3d点坐标！！！
     const double depth(((*it)->point->pos_ - ref_pos).norm());
     const Vector3d xyz_ref((*it)->f*depth);
 
     // evaluate projection jacobian
+    // 估计投影jacobian矩阵
     Matrix<double,2,6> frame_jac;
     Frame::jacobian_xyz2uv(xyz_ref, frame_jac);
 
     // compute bilateral interpolation weights for reference image
+    // 计算参考图像的双边插值权重
     const float subpix_u_ref = u_ref-u_ref_i;
     const float subpix_v_ref = v_ref-v_ref_i;
     const float w_ref_tl = (1.0-subpix_u_ref) * (1.0-subpix_v_ref);
@@ -126,16 +147,20 @@ void SparseImgAlign::precomputeReferencePatches()
       for(int x=0; x<patch_size_; ++x, ++ref_img_ptr, ++cache_ptr, ++pixel_counter)
       {
         // precompute interpolated reference patch color
+        // 预计算插值参考面片颜色
         *cache_ptr = w_ref_tl*ref_img_ptr[0] + w_ref_tr*ref_img_ptr[1] + w_ref_bl*ref_img_ptr[stride] + w_ref_br*ref_img_ptr[stride+1];
 
         // we use the inverse compositional: thereby we can take the gradient always at the same position
         // get gradient of warped image (~gradient at warped position)
+        // 我们使用逆合成：因此，我们可以始终在相同的位置使用梯度
+        // 获取扭曲图像的梯度（~扭曲位置的梯度）
         float dx = 0.5f * ((w_ref_tl*ref_img_ptr[1] + w_ref_tr*ref_img_ptr[2] + w_ref_bl*ref_img_ptr[stride+1] + w_ref_br*ref_img_ptr[stride+2])
                           -(w_ref_tl*ref_img_ptr[-1] + w_ref_tr*ref_img_ptr[0] + w_ref_bl*ref_img_ptr[stride-1] + w_ref_br*ref_img_ptr[stride]));
         float dy = 0.5f * ((w_ref_tl*ref_img_ptr[stride] + w_ref_tr*ref_img_ptr[1+stride] + w_ref_bl*ref_img_ptr[stride*2] + w_ref_br*ref_img_ptr[stride*2+1])
                           -(w_ref_tl*ref_img_ptr[-stride] + w_ref_tr*ref_img_ptr[1-stride] + w_ref_bl*ref_img_ptr[0] + w_ref_br*ref_img_ptr[1]));
 
         // cache the jacobian
+        // 缓存雅可比矩阵
         jacobian_cache_.col(feature_counter*patch_area_ + pixel_counter) =
             (dx*frame_jac.row(0) + dy*frame_jac.row(1))*(focal_length / (1<<level_));
       }
@@ -144,12 +169,14 @@ void SparseImgAlign::precomputeReferencePatches()
   have_ref_patch_cache_ = true;
 }
 
+// 计算残差
 double SparseImgAlign::computeResiduals(
     const SE3& T_cur_from_ref,
     bool linearize_system,
     bool compute_weight_scale)
 {
   // Warp the (cur)rent image such that it aligns with the (ref)erence image
+  // 弯曲现有的帧，让它与参考帧对齐
   const cv::Mat& cur_img = cur_frame_->img_pyr_.at(level_);
 
   if(linearize_system && display_)
@@ -191,6 +218,7 @@ double SparseImgAlign::computeResiduals(
       continue;
 
     // compute bilateral interpolation weights for the current image
+    // 计算当前图像的双边插值权重
     const float subpix_u_cur = u_cur-u_cur_i;
     const float subpix_v_cur = v_cur-v_cur_i;
     const float w_cur_tl = (1.0-subpix_u_cur) * (1.0-subpix_v_cur);
@@ -198,7 +226,9 @@ double SparseImgAlign::computeResiduals(
     const float w_cur_bl = (1.0-subpix_u_cur) * subpix_v_cur;
     const float w_cur_br = subpix_u_cur * subpix_v_cur;
     float* ref_patch_cache_ptr = reinterpret_cast<float*>(ref_patch_cache_.data) + patch_area_*feature_counter;
-    size_t pixel_counter = 0; // is used to compute the index of the cached jacobian
+    size_t pixel_counter = 0; 
+    // is used to compute the index of the cached jacobian
+    //用于计算缓存的雅可比矩阵的索引
     for(int y=0; y<patch_size_; ++y)
     {
       uint8_t* cur_img_ptr = (uint8_t*) cur_img.data + (v_cur_i+y-patch_halfsize_)*stride + (u_cur_i-patch_halfsize_);
@@ -206,14 +236,17 @@ double SparseImgAlign::computeResiduals(
       for(int x=0; x<patch_size_; ++x, ++pixel_counter, ++cur_img_ptr, ++ref_patch_cache_ptr)
       {
         // compute residual
+        // 计算残差
         const float intensity_cur = w_cur_tl*cur_img_ptr[0] + w_cur_tr*cur_img_ptr[1] + w_cur_bl*cur_img_ptr[stride] + w_cur_br*cur_img_ptr[stride+1];
         const float res = intensity_cur - (*ref_patch_cache_ptr);
 
         // used to compute scale for robust cost
+        //用于计算稳健成本的规模
         if(compute_weight_scale)
           errors.push_back(fabsf(res));
 
         // robustification
+        //稳健性
         float weight = 1.0;
         if(use_weights_) {
           weight = weight_function_->value(res/scale_);
@@ -225,6 +258,7 @@ double SparseImgAlign::computeResiduals(
         if(linearize_system)
         {
           // compute Jacobian, weighted Hessian and weighted "steepest descend images" (times error)
+          //计算雅可比矩阵、加权Hessian和加权“最陡下降图像”（倍误差）
           const Vector6d J(jacobian_cache_.col(feature_counter*patch_area_ + pixel_counter));
           H_.noalias() += J*J.transpose()*weight;
           Jres_.noalias() -= J*res*weight;
@@ -236,6 +270,7 @@ double SparseImgAlign::computeResiduals(
   }
 
   // compute the weights on the first iteration
+  // 在第一次迭代时计算权重
   if(compute_weight_scale && iter_ == 0)
     scale_ = scale_estimator_->compute(errors);
 
@@ -255,6 +290,7 @@ void SparseImgAlign::update(
     ModelType& T_curnew_from_ref)
 {
   T_curnew_from_ref =  T_curold_from_ref * SE3::exp(-x_);
+  //为什么不是 T_curnew_from_ref = T_curold_from_ref * (SE3::exp(x_)).inverse(); 需要以后研究一下
 }
 
 void SparseImgAlign::startIteration()

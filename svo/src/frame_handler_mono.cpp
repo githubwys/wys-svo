@@ -154,20 +154,27 @@ FrameHandlerBase::UpdateResult FrameHandlerMono::processFrame()
 {
   // Set initial pose TODO use prior
   // 设置初始的新的一帧的位姿pose：T_f_w_ 世界坐标系到当前真的转换 = 上一帧的pose
+  // 把上一帧的位姿作为当前帧的初始位姿。
+  // 把上一帧作为参考帧。
   new_frame_->T_f_w_ = last_frame_->T_f_w_;
 
   // sparse image align
   // 稀疏图像对齐
+  // sparse_img_align.h.cpp // 
   SVO_START_TIMER("sparse_img_align");
-  SparseImgAlign img_align(Config::kltMaxLevel(), Config::kltMinLevel(),
-                           30, SparseImgAlign::GaussNewton, false, false);
+  SparseImgAlign img_align(Config::kltMaxLevel(), 
+                          Config::kltMinLevel(),
+                          30, // 迭代次数
+                          SparseImgAlign::GaussNewton, // 方法GaussNewton 算其他的本来还有optimizeLevenbergMarquardt
+                          false, // display
+                          false); // verbose
   // 运行稀疏图像对齐                         
   size_t img_align_n_tracked = img_align.run(last_frame_, new_frame_);
   SVO_STOP_TIMER("sparse_img_align");
   SVO_LOG(img_align_n_tracked);
   SVO_DEBUG_STREAM("Img Align:\t Tracked = " << img_align_n_tracked);
 
-  // map reprojection & feature alignment
+  // map reprojection & feature alignment :::::relaxation：：：：：基于图块的特征点匹配
   // 地图重投影和特征对齐
   SVO_START_TIMER("reproject");
   // 地图重投影
@@ -187,7 +194,7 @@ FrameHandlerBase::UpdateResult FrameHandlerMono::processFrame()
     return RESULT_FAILURE;
   }
 
-  // pose optimization
+  // pose optimization：：：：：：1.4进一步优化位姿
   // 位姿估计
   SVO_START_TIMER("pose_optimizer");
   size_t sfba_n_edges_final;
@@ -203,7 +210,7 @@ FrameHandlerBase::UpdateResult FrameHandlerMono::processFrame()
   if(sfba_n_edges_final < 20)
     return RESULT_FAILURE;
 
-  // structure optimization
+  // structure optimization：：：：：：：1.5优化地图点
   // 结构优化：优化一些观察到的3D点。
   SVO_START_TIMER("point_optimizer");
   optimizeStructure(new_frame_, Config::structureOptimMaxPts(), Config::structureOptimNumIter());

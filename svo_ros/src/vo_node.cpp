@@ -85,7 +85,7 @@ VoNode::VoNode() ://vonode类的实例化
 
   // Init VO and start
   vo_ = new svo::FrameHandlerMono(cam_);////FrameHandlerMono类的初始化，单目帧处理
-  vo_->start();// bool start=true ,svo开始运行
+  vo_->start();// bool start=true 
 }
 
 VoNode::~VoNode()
@@ -96,6 +96,7 @@ VoNode::~VoNode()
     user_input_thread_->stop();
 }
 
+// 
 void VoNode::imgCb(const sensor_msgs::ImageConstPtr& msg)
 {
   cv::Mat img;//img 格式转换，从ros img 到OpenCV img
@@ -105,6 +106,7 @@ void VoNode::imgCb(const sensor_msgs::ImageConstPtr& msg)
     ROS_ERROR("cv_bridge exception: %s", e.what());
   }
   processUserActions();
+  // svo从添加图像开始运行 frame_handle_mono.cpp
   vo_->addImage(img, msg->header.stamp.toSec());//添加img
   visualizer_.publishMinimal(img, vo_->lastFrame(), *vo_, msg->header.stamp.toSec());
 
