@@ -105,11 +105,13 @@ void FastDetector::detect(
   }
 
   // Create feature for every corner that has high enough corner score
+  // 为每个角点分数足够高的角点创建特征
   std::for_each(corners.begin(), corners.end(), [&](Corner& c) {
     if(c.score > detection_threshold)
       fts.push_back(new Feature(frame, Vector2d(c.x, c.y), c.level));
   });
 
+  // 重置格网
   resetGrid();
 }
 
